@@ -249,8 +249,8 @@
    NO uses la service_role key.
    ===================================================================== */
 const CONFIG = {
-  SUPABASE_URL:      "https://qcwpnovwyhzhqqmhjxco.supabase.co",   // ej: https://qcwpnovwyhzhqqmhjxco.supabase.co
-  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjd3Bub3Z3eWh6aHFxbWhqeGNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MDA3OTUsImV4cCI6MjA5NTI3Njc5NX0.-MSnn07PdxstQ90OLf16823Nvihr47ePXoQSFvgC3mU",          // la llave pública (anon)
+  SUPABASE_URL:      "PEGAR_AQUI_LA_URL_DE_SUPABASE",   // ej: https://qcwpnovwyhzhqqmhjxco.supabase.co
+  SUPABASE_ANON_KEY: "PEGAR_AQUI_LA_ANON_KEY",          // la llave pública (anon)
   STORAGE_KEY:       "sgc_rec_v2"
 };
 /* ===================================================================== */
@@ -328,7 +328,7 @@ async function readRevisiones(P){
   const pulso = col>0?'critico':((rie>0||dis>0)?'riesgo':'optimo');
   const note = rows.length===0 ? 'Sin capturas de triage este mes.' :
     `${col} colapsados · ${rie} en riesgo · ${opt} óptimos · ${dis} disonancias · ${cap}/${rows.length} procesos evaluados.`;
-  return {id:'rev',name:'Revisiones Macro y Micro',cat:'Tablero de triage',color:'#c9952b',url:'',pulso,
+  return {id:'rev',name:'Revisiones Macro y Micro',cat:'Tablero de triage',color:'#c9952b',url:'https://creartgolden-max.github.io/revisiones-rec/',pulso,
     m1:{v:String(col),k:'Colapsados'}, m2:{v:String(dis),k:'Disonancias'}, note, actions};
 }
 
@@ -351,7 +351,7 @@ async function readCultura(P){
   const pulso = cand>0?'critico':(low>0?'riesgo':'optimo');
   const note = rows.length===0 ? 'Sin evaluaciones de cultura este mes.' :
     `${rows.length} evaluado(s) · apego prom. ${apego} · ${cand} candado(s) · ${low} bajo 80%.`;
-  return {id:'cult',name:'Apego a la Cultura',cat:'Comité evaluador',color:'#7a4fb5',url:'',pulso,
+  return {id:'cult',name:'Apego a la Cultura',cat:'Comité evaluador',color:'#7a4fb5',url:'https://creartgolden-max.github.io/comite-cultura-rec/',pulso,
     m1:{v:apego,k:'Apego prom.'}, m2:{v:String(cand),k:'Candados'}, note, actions};
 }
 
@@ -378,7 +378,7 @@ async function readGestor(P){
   const pulso = enRiesgo>0?'riesgo':'optimo';
   const note = projs.length===0 ? 'Sin proyectos registrados.' :
     `${projs.length} proyectos · avance global ${avg}% · ${enRiesgo} en riesgo de fecha.`;
-  return {id:'gpr',name:'Gestor de Proyectos',cat:'Proyectos especiales',color:'#2E75B6',url:'',pulso,
+  return {id:'gpr',name:'Gestor de Proyectos',cat:'Proyectos especiales',color:'#2E75B6',url:'https://creartgolden-max.github.io/gestor-proyectos-rec/',pulso,
     m1:{v:avg+'%',k:'Avance global'}, m2:{v:String(enRiesgo),k:'En riesgo'}, note, actions};
 }
 
@@ -408,7 +408,7 @@ async function readVentas(P){
   if(lc!=null) partes.push(`LC ${fmt(lc)}`);
   if(br!=null) partes.push(`BR ${fmt(br)}`);
   const note=partes.join(' · ')+'.';
-  return {id:'vta',name:'Ventas',cat:'Seguimiento comercial',color:'#2e7d4f',url:'',pulso,
+  return {id:'vta',name:'Ventas',cat:'Seguimiento comercial',color:'#2e7d4f',url:'https://creartgolden-max.github.io/ventas-rec/',pulso,
     m1:{v:(cumpl!=null?cumpl+'%':'—'),k:'GLOBAL vs meta'}, m2:{v:money(real),k:'Vendido del mes'}, note, actions};
 }
 
@@ -421,7 +421,7 @@ async function loadLive(){
     const [gpr,cult,rev,vta]=await Promise.all([readGestor(P),readCultura(P),readRevisiones(P),readVentas(P)]);
     [gpr,cult,rev,vta].forEach(live=>{
       const idx=state.modules.findIndex(m=>m.id===live.id);
-      if(idx>=0 && state.modules[idx].url) live.url=state.modules[idx].url; // conservar enlace si lo puso Rodrigo
+      if(idx>=0 && !live.url && state.modules[idx].url) live.url=state.modules[idx].url; // el código fija las URLs; si no, conservar manual
       // añadir acciones manuales que Rodrigo agregó a este módulo en vivo
       (state.manualActions[live.id]||[]).forEach(a=> live.actions.push(Object.assign({},a)));
       applyOverlay(live);
