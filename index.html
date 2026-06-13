@@ -107,6 +107,8 @@
   .pe-grid .full{grid-column:1/-1}
   .copied{color:var(--ok);font-family:Arial,sans-serif;font-size:12px;font-weight:700;margin-left:10px}
   textarea.modal-ta{font-family:Arial,sans-serif;font-size:14px;border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%;margin-top:4px;resize:vertical;min-height:60px}
+
+  /* ===== Login PIN de Dirección + toast ===== */
   .overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(22,41,74,.97),rgba(31,56,100,.97));padding:20px}
   .overlay.hidden{display:none}
   .loginbox{background:var(--card);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.4);width:100%;max-width:390px;padding:34px 30px;text-align:center}
@@ -124,6 +126,8 @@
 </style>
 </head>
 <body>
+
+<!-- ===== LOGIN PIN DE DIRECCIÓN ===== -->
 <div class="overlay" id="loginOverlay">
   <div class="loginbox">
     <div class="eyebrow">Recouromex · Centro de Mando</div>
@@ -135,6 +139,7 @@
   </div>
 </div>
 <div id="toast" class="toast"></div>
+
 <div class="topbar">
   <div>
     <div class="eyebrow">Recouromex · Centro de Mando · Dirección General</div>
@@ -187,6 +192,7 @@
     Tus decisiones manuales y lo marcado como "hecho" se guardan solo en este equipo. <span id="syncInfo">—</span>
   </p>
 </div>
+
 <div class="modal-bg" id="modalBg">
   <div class="modal">
     <div class="mh" id="modalTitle">Nueva sección</div>
@@ -211,6 +217,7 @@
     </div>
   </div>
 </div>
+
 <div class="modal-bg" id="peBg">
   <div class="modal pe-modal" style="max-width:520px">
     <div class="mh">Crear Proyecto Especial · para Alma</div>
@@ -234,23 +241,31 @@
     </div>
   </div>
 </div>
+
 <script>
 /* =====================================================================
-   CONFIG
+   ███  CONFIG — EDITA SOLO ESTE BLOQUE  ███
+   Rodrigo pega la URL y la ANON key del proyecto (solo lectura).
+   NO uses la service_role key.
    ===================================================================== */
 const CONFIG = {
-  SUPABASE_URL:      "https://qcwpnovwyhzhqqmhjxco.supabase.co",
-  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjd3Bub3Z3eWh6aHFxbWhqeGNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MDA3OTUsImV4cCI6MjA5NTI3Njc5NX0.-MSnn07PdxstQ90OLf16823Nvihr47ePXoQSFvgC3mU",
+  SUPABASE_URL:      "PEGAR_AQUI_LA_URL_DE_SUPABASE",   // ej: https://qcwpnovwyhzhqqmhjxco.supabase.co
+  SUPABASE_ANON_KEY: "PEGAR_AQUI_LA_ANON_KEY",          // la llave pública (anon)
   STORAGE_KEY:       "sgc_rec_v2"
 };
 /* ===================================================================== */
+
 let db=null;
 const cfgOK = CONFIG.SUPABASE_URL && !CONFIG.SUPABASE_URL.startsWith("PEGAR")
            && CONFIG.SUPABASE_ANON_KEY && !CONFIG.SUPABASE_ANON_KEY.startsWith("PEGAR");
+
+/* Periodo: por defecto el mes en curso */
 const MESES={Enero:'01',Febrero:'02',Marzo:'03',Abril:'04',Mayo:'05',Junio:'06',Julio:'07',Agosto:'08',Septiembre:'09',Octubre:'10',Noviembre:'11',Diciembre:'12'};
 const MESES_INV=Object.fromEntries(Object.entries(MESES).map(([k,v])=>[v,k]));
 function periodoActualLabel(){ const d=new Date(); return (MESES_INV[String(d.getMonth()+1).padStart(2,'0')])+' '+d.getFullYear(); }
 function labelToPeriodo(lbl){ const p=String(lbl).split(' '); return (p[1]||'2026')+'-'+(MESES[p[0]]||'06'); }
+
+/* Estado: módulos manuales (inv, pce, custom) + overlay de decisiones + acciones manuales */
 let state = {
   period: periodoActualLabel(),
   modules:[
@@ -262,17 +277,22 @@ let state = {
      note:"Piloto único hasta dic 2026. Integra KPI, cultura y avance de proyectos de Alma. Conversación 1-a-1 pendiente.",
      actions:[{txt:"Sesión <b>1-a-1 de crecimiento</b> con Alma (PCE del mes)",prio:"alta",owner:"Rodrigo",done:false}]},
   ],
-  manualActions:{},
-  overlay:{}
+  manualActions:{},   // {modId: [actions]} añadidas por Rodrigo a módulos en vivo
+  overlay:{}          // {modId::txt: {done, decision, decExtra, pe, peReady}}
 };
 const LIVE_IDS=['gpr','cult','rev','vta'];
+
 const pulsoMeta={optimo:{label:"Óptimo",color:"var(--ok)"},riesgo:{label:"Atención",color:"var(--warn)"},critico:{label:"Crítico",color:"var(--bad)"}};
 const prioOrder={alta:0,media:1,baja:2};
 let filter="todas";
+
 function save(){ try{ localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
 function load(){ try{ const d=localStorage.getItem(CONFIG.STORAGE_KEY); if(d){ const s=JSON.parse(d); state=Object.assign(state,s); state.manualActions=state.manualActions||{}; state.overlay=state.overlay||{}; } }catch(e){} }
+
 function toast(msg,kind){ const t=document.getElementById('toast'); t.textContent=msg; t.className='toast show'+(kind?(' '+kind):''); clearTimeout(t._h); t._h=setTimeout(()=>{t.className='toast';},3800); }
 function setBadge(txt,color){ const b=document.getElementById('liveBadge'); if(b){ b.textContent=txt; b.style.background=color; } }
+
+/* ---- Overlay de decisiones (persiste por clave módulo::texto) ---- */
 function stripHtml(s){ return String(s||'').replace(/<[^>]+>/g,'').trim(); }
 function aKey(modId,txt){ return modId+'::'+stripHtml(txt); }
 function applyOverlay(mod){
@@ -283,6 +303,10 @@ function writeOverlay(modId,a){
   state.overlay=state.overlay||{};
   state.overlay[aKey(modId,a.txt)]={done:!!a.done,decision:a.decision,decExtra:a.decExtra,pe:a.pe,peReady:a.peReady};
 }
+
+/* =====================================================================
+   LECTURAS EN VIVO (solo SELECT)
+   ===================================================================== */
 async function readRevisiones(P){
   const [procRes, revRes] = await Promise.all([
     db.from('rev_procesos').select('id,nombre'),
@@ -295,18 +319,19 @@ async function readRevisiones(P){
   rows.forEach(r=>{
     const pn=nm[r.proceso_id]||r.proceso_id;
     if(r.estado && r.estado!=='pendiente') cap++;
-    if(r.estado==='colapsado'){ col++; actions.push({txt:'<b>Plan de Rescate</b> · '+pn,prio:'alta',owner:'Alma + Coord.',done:false}); }
-    else if(r.estado==='riesgo'){ rie++; actions.push({txt:'<b>Plan de Mejora</b> · '+pn,prio:'media',owner:'Alma + Coord.',done:false}); }
+    if(r.estado==='colapsado'){ col++; actions.push({txt:`<b>Plan de Rescate</b> · ${pn}`,prio:'alta',owner:'Alma + Coord.',done:false}); }
+    else if(r.estado==='riesgo'){ rie++; actions.push({txt:`<b>Plan de Mejora</b> · ${pn}`,prio:'media',owner:'Alma + Coord.',done:false}); }
     else if(r.estado==='optimo'){ opt++; }
-    if(r.disonancia){ dis++; actions.push({txt:'⚑ <b>Acompañamiento</b> · '+pn+' (números ok, persona en alerta)',prio:'alta',owner:'Rodrigo',done:false}); }
-    if(r.retar){ ret++; actions.push({txt:'<b>Reta Estratégica</b> · '+pn+' (3 meses al 100%)',prio:'baja',owner:'Rodrigo',done:false}); }
+    if(r.disonancia){ dis++; actions.push({txt:`⚑ <b>Acompañamiento</b> · ${pn} (números ok, persona en alerta)`,prio:'alta',owner:'Rodrigo',done:false}); }
+    if(r.retar){ ret++; actions.push({txt:`<b>Reta Estratégica</b> · ${pn} (3 meses al 100%)`,prio:'baja',owner:'Rodrigo',done:false}); }
   });
   const pulso = col>0?'critico':((rie>0||dis>0)?'riesgo':'optimo');
   const note = rows.length===0 ? 'Sin capturas de triage este mes.' :
-    col+' colapsados · '+rie+' en riesgo · '+opt+' óptimos · '+dis+' disonancias · '+cap+'/'+rows.length+' procesos evaluados.';
+    `${col} colapsados · ${rie} en riesgo · ${opt} óptimos · ${dis} disonancias · ${cap}/${rows.length} procesos evaluados.`;
   return {id:'rev',name:'Revisiones Macro y Micro',cat:'Tablero de triage',color:'#c9952b',url:'',pulso,
     m1:{v:String(col),k:'Colapsados'}, m2:{v:String(dis),k:'Disonancias'}, note, actions};
 }
+
 async function readCultura(P){
   const [colRes, evRes] = await Promise.all([
     db.from('cult_colaboradores').select('id,nombre'),
@@ -319,16 +344,17 @@ async function readCultura(P){
     const who=nm[r.colaborador_id]||r.colaborador_id;
     const viol = r.k_acoso||r.k_seguridad||r.k_laico;
     if(r.resultado!=null) vals.push(r.resultado);
-    if(viol){ cand++; actions.push({txt:'⚠ <b>Escalar candado de integridad</b> · '+who,prio:'alta',owner:'Rodrigo / RH',done:false}); }
-    if(r.resultado!=null && r.resultado<80){ low++; actions.push({txt:'Plan de desarrollo · '+who+' (apego '+r.resultado+'%)',prio:'media',owner:'Rodrigo',done:false}); }
+    if(viol){ cand++; actions.push({txt:`⚠ <b>Escalar candado de integridad</b> · ${who}`,prio:'alta',owner:'Rodrigo / RH',done:false}); }
+    if(r.resultado!=null && r.resultado<80){ low++; actions.push({txt:`Plan de desarrollo · ${who} (apego ${r.resultado}%)`,prio:'media',owner:'Rodrigo',done:false}); }
   });
   const apego = vals.length? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length)+'%' : '—';
   const pulso = cand>0?'critico':(low>0?'riesgo':'optimo');
   const note = rows.length===0 ? 'Sin evaluaciones de cultura este mes.' :
-    rows.length+' evaluado(s) · apego prom. '+apego+' · '+cand+' candado(s) · '+low+' bajo 80%.';
+    `${rows.length} evaluado(s) · apego prom. ${apego} · ${cand} candado(s) · ${low} bajo 80%.`;
   return {id:'cult',name:'Apego a la Cultura',cat:'Comité evaluador',color:'#7a4fb5',url:'',pulso,
     m1:{v:apego,k:'Apego prom.'}, m2:{v:String(cand),k:'Candados'}, note, actions};
 }
+
 function projProgress(pr){ const h=Array.isArray(pr.hitos)?pr.hitos:[]; if(!h.length) return null; return Math.round(h.filter(x=>x.hecho).length/h.length*100); }
 async function readGestor(P){
   const projRes = await db.from('gpr_projects').select('id,nombre,revisor,inicio,termino,status,hitos');
@@ -344,17 +370,18 @@ async function readGestor(P){
     const atorado = activo && prog!=null && prog<50 && pr.inicio && pr.inicio<today && !vencido;
     if(vencido||atorado){
       enRiesgo++;
-      const detalle=(prog==null?'sin hitos':prog+'%')+(pr.termino?' · vence '+pr.termino:'');
-      actions.push({txt:'Destrabar <b>'+pr.nombre+'</b> ('+detalle+')',prio: vencido?'alta':'media',owner: pr.revisor||'—',done:false});
+      const detalle=(prog==null?'sin hitos':prog+'%')+(pr.termino?` · vence ${pr.termino}`:'');
+      actions.push({txt:`Destrabar <b>${pr.nombre}</b> (${detalle})`,prio: vencido?'alta':'media',owner: pr.revisor||'—',done:false});
     }
   });
   const avg = progs.length? Math.round(progs.reduce((a,b)=>a+b,0)/progs.length) : 0;
   const pulso = enRiesgo>0?'riesgo':'optimo';
   const note = projs.length===0 ? 'Sin proyectos registrados.' :
-    projs.length+' proyectos · avance global '+avg+'% · '+enRiesgo+' en riesgo de fecha.';
+    `${projs.length} proyectos · avance global ${avg}% · ${enRiesgo} en riesgo de fecha.`;
   return {id:'gpr',name:'Gestor de Proyectos',cat:'Proyectos especiales',color:'#2E75B6',url:'',pulso,
     m1:{v:avg+'%',k:'Avance global'}, m2:{v:String(enRiesgo),k:'En riesgo'}, note, actions};
 }
+
 async function readVentas(P){
   const money=v=> v==null?'—':'$'+Number(v).toLocaleString('es-MX',{maximumFractionDigits:0});
   const pa=String(P).split('-'); const anio=parseInt(pa[0],10), mes=parseInt(pa[1],10);
@@ -370,20 +397,21 @@ async function readVentas(P){
   let cumpl=null, pulso='optimo';
   if(real!=null && meta && meta>0){ cumpl=Math.round(real/meta*100); pulso=cumpl>=100?'optimo':(cumpl>=80?'riesgo':'critico'); }
   const yoy=id=>{ const r=vm[id]; if(!r||r.venta_real==null||!(r.venta_anio_anterior>0)) return null; return Math.round((r.venta_real-r.venta_anio_anterior)/r.venta_anio_anterior*100); };
-  const fmt=d=> d==null?'—':((d>0?'▲+':'▼')+d+'%');
+  const fmt=d=> d==null?'—':((d>0?'▲+':(d<0?'▼':'■'))+d+'%');
   const lc=yoy('lc'), br=yoy('br');
   const actions=[];
   if(cumpl!=null && cumpl<100){
-    actions.push({txt:'Ventas GLOBAL en '+mesNombre+': <b>'+cumpl+'%</b> de la meta — revisar plan comercial',prio: cumpl<80?'alta':'media', owner:'Rodrigo', done:false});
+    actions.push({txt:`Ventas GLOBAL en ${mesNombre}: <b>${cumpl}%</b> de la meta — revisar plan comercial`, prio: cumpl<80?'alta':'media', owner:'Rodrigo', done:false});
   }
   const partes=[];
-  partes.push(cumpl!=null?'GLOBAL '+cumpl+'% de meta':'GLOBAL sin meta/dato este mes');
-  if(lc!=null) partes.push('LC '+fmt(lc));
-  if(br!=null) partes.push('BR '+fmt(br));
+  partes.push(cumpl!=null?`GLOBAL ${cumpl}% de meta`:'GLOBAL sin meta/dato este mes');
+  if(lc!=null) partes.push(`LC ${fmt(lc)}`);
+  if(br!=null) partes.push(`BR ${fmt(br)}`);
   const note=partes.join(' · ')+'.';
   return {id:'vta',name:'Ventas',cat:'Seguimiento comercial',color:'#2e7d4f',url:'',pulso,
     m1:{v:(cumpl!=null?cumpl+'%':'—'),k:'GLOBAL vs meta'}, m2:{v:money(real),k:'Vendido del mes'}, note, actions};
 }
+
 async function loadLive(){
   if(!db){ toast('Sin conexión','err'); return; }
   const P=labelToPeriodo(state.period);
@@ -393,7 +421,8 @@ async function loadLive(){
     const [gpr,cult,rev,vta]=await Promise.all([readGestor(P),readCultura(P),readRevisiones(P),readVentas(P)]);
     [gpr,cult,rev,vta].forEach(live=>{
       const idx=state.modules.findIndex(m=>m.id===live.id);
-      if(idx>=0 && state.modules[idx].url) live.url=state.modules[idx].url;
+      if(idx>=0 && state.modules[idx].url) live.url=state.modules[idx].url; // conservar enlace si lo puso Rodrigo
+      // añadir acciones manuales que Rodrigo agregó a este módulo en vivo
       (state.manualActions[live.id]||[]).forEach(a=> live.actions.push(Object.assign({},a)));
       applyOverlay(live);
       if(idx>=0) state.modules[idx]=live; else state.modules.unshift(live);
@@ -407,6 +436,10 @@ async function loadLive(){
     toast('Error al leer datos: '+(err.message||err),'err');
   }
 }
+
+/* =====================================================================
+   RENDER (igual que el cascarón) + login
+   ===================================================================== */
 function renderModules(){
   const g=document.getElementById('modGrid'); g.innerHTML='';
   state.modules.forEach((m,i)=>{
@@ -430,9 +463,10 @@ function renderModules(){
     g.appendChild(div);
   });
   const add=document.createElement('div'); add.className='addmod'; add.onclick=()=>openModal();
-  add.innerHTML='<div class="plus">+</div><div class="t">Nueva sección</div>';
+  add.innerHTML=`<div class="plus">+</div><div class="t">Nueva sección</div>`;
   g.appendChild(add);
 }
+
 function allActions(){
   const arr=[];
   state.modules.forEach(m=>{ (m.actions||[]).forEach((a,idx)=>arr.push({...a,mod:m.name,modId:m.id,color:m.color,_mi:state.modules.indexOf(m),_ai:idx})); });
@@ -446,14 +480,14 @@ function renderDecision(){
     if(filter!=='todas' && a.modId!==filter) return;
     const tr=document.createElement('tr'); if(a.done) tr.className='done';
     const decOpts=['—','Crear Proyecto Especial','Esperar un mes más','Reunir con un puesto/persona','Delegar y dar seguimiento','Cancelar / descartar','Otra decisión'];
-    const sel=decOpts.map(o=>'<option '+(a.decision===o?'selected':'')+'>'+o+'</option>').join('');
+    const sel=decOpts.map(o=>`<option ${a.decision===o?'selected':''}>${o}</option>`).join('');
     let stateLine='';
-    if(a.decision==='Crear Proyecto Especial' && a.peReady) stateLine='<span class="decstate proyecto">✓ Proyecto listo · <a href="#" onclick="openPE('+a._mi+','+a._ai+');return false" style="color:var(--ok)">ver texto</a></span>';
-    else if(a.decision==='Esperar un mes más') stateLine='<span class="decstate espera">⏸ Pospuesto al mes siguiente</span>';
-    else if(a.decision==='Reunir con un puesto/persona') stateLine='<span class="decstate reunir">👥 Reunión: '+(a.decExtra||'(definir con quién)')+'</span>';
-    else if(a.decision==='Delegar y dar seguimiento') stateLine='<span class="decstate delegar">→ Delegado a: '+(a.decExtra||'(definir)')+'</span>';
-    else if(a.decision==='Cancelar / descartar') stateLine='<span class="decstate cancel">Descartado</span>';
-    else if(a.decision==='Otra decisión') stateLine='<span class="decstate otra">'+(a.decExtra||'(especificar)')+'</span>';
+    if(a.decision==='Crear Proyecto Especial' && a.peReady) stateLine=`<span class="decstate proyecto">✓ Proyecto listo · <a href="#" onclick="openPE(${a._mi},${a._ai});return false" style="color:var(--ok)">ver texto</a></span>`;
+    else if(a.decision==='Esperar un mes más') stateLine=`<span class="decstate espera">⏸ Pospuesto al mes siguiente</span>`;
+    else if(a.decision==='Reunir con un puesto/persona') stateLine=`<span class="decstate reunir">👥 Reunión: ${a.decExtra||'(definir con quién)'}</span>`;
+    else if(a.decision==='Delegar y dar seguimiento') stateLine=`<span class="decstate delegar">→ Delegado a: ${a.decExtra||'(definir)'}</span>`;
+    else if(a.decision==='Cancelar / descartar') stateLine=`<span class="decstate cancel">Descartado</span>`;
+    else if(a.decision==='Otra decisión') stateLine=`<span class="decstate otra">${a.decExtra||'(especificar)'}</span>`;
     tr.innerHTML=`
       <td><span class="src" style="background:${a.color}">${a.mod}</span></td>
       <td class="accion-txt">${a.txt}</td>
@@ -470,15 +504,16 @@ function renderDecision(){
 }
 function renderFilters(){
   const fb=document.getElementById('filterBar');
-  fb.innerHTML='<button class="fbtn '+(filter==='todas'?'on':'')+'" onclick="setFilter('todas')">Todas</button>';
-  state.modules.forEach(m=>{ fb.innerHTML+='<button class="fbtn '+(filter===m.id?'on':'')+'" onclick="setFilter(''+m.id+'')">'+m.name+'</button>'; });
+  fb.innerHTML=`<button class="fbtn ${filter==='todas'?'on':''}" onclick="setFilter('todas')">Todas</button>`;
+  state.modules.forEach(m=>{ fb.innerHTML+=`<button class="fbtn ${filter===m.id?'on':''}" onclick="setFilter('${m.id}')">${m.name}</button>`; });
 }
 function renderOwnerSelect(){
   const s=document.getElementById('aMod'); s.innerHTML='';
-  state.modules.forEach(m=>{ s.innerHTML+='<option value="'+m.id+'">'+m.name+'</option>'; });
+  state.modules.forEach(m=>{ s.innerHTML+=`<option value="${m.id}">${m.name}</option>`; });
 }
 function setFilter(f){ filter=f; renderFilters(); renderDecision(); }
 function toggleDone(mi,ai){ const m=state.modules[mi]; const a=m.actions[ai]; a.done=!a.done; writeOverlay(m.id,a); save(); renderDecision(); }
+
 function setDecision(mi,ai,val){
   const m=state.modules[mi]; const a=m.actions[ai];
   a.decision=val;
@@ -489,6 +524,7 @@ function setDecision(mi,ai,val){
   else { a.decExtra=''; }
   writeOverlay(m.id,a); save(); renderDecision();
 }
+
 let peCtx={mi:null,ai:null};
 function openPE(mi,ai){
   peCtx={mi,ai};
@@ -510,17 +546,17 @@ function buildPEText(){
   const v=id=>document.getElementById(id).value;
   const prioCap=v('pePrio').charAt(0).toUpperCase()+v('pePrio').slice(1);
   const txt=
-"NUEVO PROYECTO ESPECIAL — Recouromex\n"+
-"─────────────────────────────────────\n"+
-"Proyecto:         "+v('peName')+"\n"+
-"Responsable:      "+v('peResp')+"\n"+
-"Prioridad:        "+prioCap+"\n"+
-"Proceso afectado: "+v('peProc')+"\n"+
-"Fuente:           "+v('peFuente')+"\n"+
-"Fecha límite:     "+v('peFecha')+"\n"+
-"Descripción:      "+v('peDesc')+"\n"+
-"─────────────────────────────────────\n"+
-"Generado desde SGC-Rec · para alta en Gestor de Proyectos";
+`NUEVO PROYECTO ESPECIAL — Recouromex
+─────────────────────────────────────
+Proyecto:         ${v('peName')}
+Responsable:      ${v('peResp')}
+Prioridad:        ${prioCap}
+Proceso afectado: ${v('peProc')}
+Fuente:           ${v('peFuente')}
+Fecha límite:     ${v('peFecha')}
+Descripción:      ${v('peDesc')}
+─────────────────────────────────────
+Generado desde SGC-Rec · para alta en Gestor de Proyectos`;
   document.getElementById('peOut').textContent=txt;
   return txt;
 }
@@ -549,8 +585,7 @@ function addAction(){
 function abrir(id){
   const m=state.modules.find(x=>x.id===id);
   if(m && m.url){ window.open(m.url,'_blank'); }
-  else { alert('Aún no has enlazado la URL de "'+m.name+'".
-Usa "Editar" para pegar el enlace de la herramienta.'); }
+  else { alert('Aún no has enlazado la URL de "'+m.name+'".\nUsa "Editar" para pegar el enlace de la herramienta.'); }
 }
 let editIndex=null;
 function openModal(){
@@ -591,6 +626,8 @@ function cerrarMes(){
   }
 }
 function renderAll(){ renderModules(); renderFilters(); renderOwnerSelect(); renderDecision(); }
+
+/* ---- Login PIN de Dirección (valida contra rev_check_pin, exige 'direccion') ---- */
 async function doLogin(){
   const msg=document.getElementById('loginMsg');
   const pin=document.getElementById('pinInput').value.trim();
@@ -607,12 +644,16 @@ async function doLogin(){
     console.error(err); msg.className='msg err'; msg.textContent='Error al validar PIN: '+(err.message||err);
   }
 }
+
+/* ---- Arranque ---- */
 function init(){
   load();
+  // asegurar que el periodo seleccionado exista en el dropdown
   const sel=document.getElementById('periodSel');
   if([...sel.options].some(o=>o.value===state.period)) sel.value=state.period; else { sel.value='Junio 2026'; state.period='Junio 2026'; }
   sel.addEventListener('change',e=>{ state.period=e.target.value; save(); if(db) loadLive(); });
   renderAll();
+
   const msg=document.getElementById('loginMsg');
   if(!cfgOK){
     msg.className='msg err';
