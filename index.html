@@ -258,9 +258,11 @@ const CONFIG = {
 };
 /* ===================================================================== */
 
-let db=null;
+let db=null, dbInv=null;
 const cfgOK = CONFIG.SUPABASE_URL && !CONFIG.SUPABASE_URL.startsWith("PEGAR")
            && CONFIG.SUPABASE_ANON_KEY && !CONFIG.SUPABASE_ANON_KEY.startsWith("PEGAR");
+const cfgInvOK = CONFIG.INV_SUPABASE_URL && !CONFIG.INV_SUPABASE_URL.startsWith("PEGAR")
+           && CONFIG.INV_SUPABASE_ANON_KEY && !CONFIG.INV_SUPABASE_ANON_KEY.startsWith("PEGAR");
 
 /* Periodo: por defecto el mes en curso */
 const MESES={Enero:'01',Febrero:'02',Marzo:'03',Abril:'04',Mayo:'05',Junio:'06',Julio:'07',Agosto:'08',Septiembre:'09',Octubre:'10',Noviembre:'11',Diciembre:'12'};
@@ -272,9 +274,9 @@ function labelToPeriodo(lbl){ const p=String(lbl).split(' '); return (p[1]||'202
 let state = {
   period: periodoActualLabel(),
   modules:[
-    {id:"inv",name:"Inventarios Importados",cat:"Kardex · Google Sheets (manual)",color:"#0f8a8a",url:"",pulso:"optimo",
+    {id:"inv",name:"Inventarios Importados",cat:"Kardex · inventario en línea",color:"#0f8a8a",url:"https://creartgolden-max.github.io/inventario-rec/",pulso:"optimo",
      m1:{v:"—",k:"Incongruencias"},m2:{v:"—",k:"Bajo mínimo"},
-     note:"Aún en otra tecnología (Google Sheets). Se conecta con un puente más adelante; por ahora captura manual.",actions:[]},
+     note:"Inventario en línea · resumen de la última semana cerrada.",actions:[]},
     {id:"pce",name:"PCE · Alma",cat:"Plan de crecimiento · solo Alma",color:"#1F3864",url:"https://creartgolden-max.github.io/pce-rec/",pulso:"riesgo",
      m1:{v:"—",k:"PCE global"},m2:{v:"—",k:"Pts cultura"},
      note:"Piloto único hasta dic 2026. Integra KPI, cultura y avance de proyectos de Alma. Conversación 1-a-1 pendiente.",
@@ -283,14 +285,14 @@ let state = {
   manualActions:{},   // {modId: [actions]} añadidas por Rodrigo a módulos en vivo
   overlay:{}          // {modId::txt: {done, decision, decExtra, pe, peReady}}
 };
-const LIVE_IDS=['gpr','cult','rev','vta'];
+const LIVE_IDS=['gpr','cult','rev','vta','inv'];
 
 const pulsoMeta={optimo:{label:"Óptimo",color:"var(--ok)"},riesgo:{label:"Atención",color:"var(--warn)"},critico:{label:"Crítico",color:"var(--bad)"}};
 const prioOrder={alta:0,media:1,baja:2};
 let filter="todas";
 
 function save(){ try{ localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
-function load(){ try{ const d=localStorage.getItem(CONFIG.STORAGE_KEY); if(d){ const s=JSON.parse(d); state=Object.assign(state,s); state.manualActions=state.manualActions||{}; state.overlay=state.overlay||{}; } }catch(e){} }
+function load(){ try{ const d=localStorage.getItem(CONFIG.STORAGE_KEY); if(d){ const s=JSON.parse(d); state=Object.assign(state,s); state.manualActions=state.manualActions||{}; state.overlay=state.overlay||{}; } }catch(e){} const FU={pce:'https://creartgolden-max.github.io/pce-rec/',inv:'https://creartgolden-max.github.io/inventario-rec/'}; (state.modules||[]).forEach(m=>{ if(FU[m.id]) m.url=FU[m.id]; }); }
 
 function toast(msg,kind){ const t=document.getElementById('toast'); t.textContent=msg; t.className='toast show'+(kind?(' '+kind):''); clearTimeout(t._h); t._h=setTimeout(()=>{t.className='toast';},3800); }
 function setBadge(txt,color){ const b=document.getElementById('liveBadge'); if(b){ b.textContent=txt; b.style.background=color; } }
@@ -415,6 +417,40 @@ async function readVentas(P){
     m1:{v:(cumpl!=null?cumpl+'%':'—'),k:'GLOBAL vs meta'}, m2:{v:money(real),k:'Vendido del mes'}, note, actions};
 }
 
+/* Inventario: lee del 2º proyecto Supabase (vbzitecyimcalorywiwr) vía dbInv */
+async function readInventario(){
+  if(!dbInv) return null;  // 2ª conexión no configurada (falta inyectar la key)
+  const [invRes, prodRes, concRes, semRes] = await Promise.all([
+    dbInv.from('inventario').select('producto_id,stock_actual'),
+    dbInv.from('productos').select('id,nombre,minimo_lts'),
+    dbInv.from('conciliaciones').select('id_semana,alerta'),
+    dbInv.from('semanas').select('id_semana,estado').eq('estado','CERRADA')
+  ]);
+  for(const r of [invRes,prodRes,concRes,semRes]) if(r.error) throw r.error;
+  // productos bajo mínimo (stock_actual < minimo_lts)
+  const minMap={}, nameMap={}; (prodRes.data||[]).forEach(p=>{ minMap[p.id]=p.minimo_lts; nameMap[p.id]=p.nombre; });
+  let bajo=0; const bajoNombres=[];
+  (invRes.data||[]).forEach(r=>{ const min=minMap[r.producto_id];
+    if(min!=null && r.stock_actual!=null && Number(r.stock_actual)<Number(min)){ bajo++; bajoNombres.push(nameMap[r.producto_id]||r.producto_id); } });
+  // última semana cerrada (id_semana SEM-YYYY-MM-DD ordena lexicográficamente)
+  const cerradas=(semRes.data||[]).map(s=>s.id_semana).sort();
+  const ultima=cerradas.length? cerradas[cerradas.length-1] : null;
+  // incongruencias de la última conciliación
+  const conc=concRes.data||[];
+  const semConc=[...new Set(conc.map(c=>c.id_semana))].sort();
+  const ultimaConc=semConc.length? semConc[semConc.length-1] : null;
+  const incong = ultimaConc? conc.filter(c=>c.id_semana===ultimaConc && c.alerta==='INCONGRUENCIA').length : 0;
+  const pulso = bajo>0 ? 'critico' : (incong>0 ? 'riesgo' : 'optimo');
+  const actions=[];
+  if(bajo>0){ actions.push({txt:`Autorizar compra · <b>${bajo}</b> producto(s) bajo mínimo (${bajoNombres.slice(0,3).join(', ')}${bajoNombres.length>3?'…':''})`,prio:'alta',owner:'Alma',done:false}); }
+  if(incong>=3){ actions.push({txt:`Revisar <b>${incong}</b> incongruencias de la conciliación (${ultimaConc||''})`,prio:'media',owner:'Alma',done:false}); }
+  const note = ultima
+    ? `Última semana cerrada: ${ultima} · ${bajo} bajo mínimo · ${incong} incongruencia(s) en la última conciliación.`
+    : 'Sin semanas cerradas registradas.';
+  return {id:'inv',name:'Inventarios Importados',cat:'Kardex · inventario en línea',color:'#0f8a8a',url:'https://creartgolden-max.github.io/inventario-rec/',pulso,
+    m1:{v:String(incong),k:'Incongruencias'}, m2:{v:String(bajo),k:'Bajo mínimo'}, note, actions};
+}
+
 async function loadLive(){
   if(!db){ toast('Sin conexión','err'); return; }
   const P=labelToPeriodo(state.period);
@@ -422,7 +458,10 @@ async function loadLive(){
   document.getElementById('syncInfo').textContent='Leyendo datos del periodo '+P+'…';
   try{
     const [gpr,cult,rev,vta]=await Promise.all([readGestor(P),readCultura(P),readRevisiones(P),readVentas(P)]);
-    [gpr,cult,rev,vta].forEach(live=>{
+    const liveList=[gpr,cult,rev,vta];
+    // Inventario: 2ª conexión Supabase (otro proyecto); si falla o no está configurada, no rompe el resto
+    try{ const inv=await readInventario(); if(inv) liveList.push(inv); }catch(e){ console.warn('inventario:', e.message); }
+    liveList.forEach(live=>{
       const idx=state.modules.findIndex(m=>m.id===live.id);
       if(idx>=0 && !live.url && state.modules[idx].url) live.url=state.modules[idx].url; // el código fija las URLs; si no, conservar manual
       // añadir acciones manuales que Rodrigo agregó a este módulo en vivo
@@ -666,6 +705,7 @@ function init(){
     return;
   }
   db=window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+  if(cfgInvOK){ try{ dbInv=window.supabase.createClient(CONFIG.INV_SUPABASE_URL, CONFIG.INV_SUPABASE_ANON_KEY); }catch(e){ console.warn('2a conexión inventario:', e.message); } }
   msg.className='msg info'; msg.textContent='Conectado. Ingresa tu PIN de Dirección.';
   document.getElementById('pinBtn').addEventListener('click', doLogin);
   document.getElementById('pinInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
