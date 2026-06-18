@@ -123,6 +123,9 @@
   .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(80px);background:var(--navy-deep);color:#fff;font-family:Arial,sans-serif;font-size:13px;padding:13px 22px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.3);opacity:0;transition:.25s;z-index:1100;max-width:90vw;text-align:center}
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
   .toast.err{background:var(--bad)} .toast.ok{background:var(--ok)}
+  .logout-btn{position:fixed;top:10px;right:14px;z-index:1200;font-family:Arial,sans-serif;font-size:11px;font-weight:700;cursor:pointer;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.15);color:#fff;padding:6px 12px;border-radius:8px;display:none}
+  .logout-btn.show{display:block}
+  .logout-btn:hover{background:rgba(255,255,255,.28)}
 </style>
 </head>
 <body>
@@ -139,6 +142,7 @@
   </div>
 </div>
 <div id="toast" class="toast"></div>
+<button class="logout-btn" id="logoutBtn" onclick="cerrarSesion()">Cerrar sesión</button>
 
 <div class="topbar">
   <div>
@@ -670,6 +674,14 @@ function cerrarMes(){
 function renderAll(){ renderModules(); renderFilters(); renderOwnerSelect(); renderDecision(); }
 
 /* ---- Login PIN de Dirección (valida contra rev_check_pin, exige 'direccion') ---- */
+function cerrarSesion(){
+  const lb=document.getElementById('logoutBtn'); if(lb) lb.classList.remove('show');
+  if(typeof setBadge==='function') setBadge('Sin conectar','var(--warn)');
+  const pin=document.getElementById('pinInput'); if(pin) pin.value='';
+  const msg=document.getElementById('loginMsg'); if(msg){ msg.className='msg info'; msg.textContent='Ingresa tu PIN de Dirección.'; }
+  document.getElementById('loginOverlay').classList.remove('hidden');
+  if(pin) pin.focus();
+}
 async function doLogin(){
   const msg=document.getElementById('loginMsg');
   const pin=document.getElementById('pinInput').value.trim();
@@ -681,6 +693,7 @@ async function doLogin(){
     if(error) throw error;
     if(data!=='direccion'){ msg.className='msg err'; msg.textContent='PIN no autorizado para Dirección.'; return; }
     document.getElementById('loginOverlay').classList.add('hidden');
+    document.getElementById('logoutBtn').classList.add('show');
     await loadLive();
   }catch(err){
     console.error(err); msg.className='msg err'; msg.textContent='Error al validar PIN: '+(err.message||err);
