@@ -366,7 +366,7 @@ async function readCultura(P){
 
 function projProgress(pr){ const h=Array.isArray(pr.hitos)?pr.hitos:[]; if(!h.length) return null; return Math.round(h.filter(x=>x.hecho).length/h.length*100); }
 async function readGestor(P){
-  const projRes = await db.from('gpr_projects').select('id,nombre,revisor,inicio,termino,status,hitos');
+  const projRes = await db.from('gpr2_proyectos').select('id,nombre,revisor,inicio,termino,status,hitos');
   if(projRes.error) throw projRes.error;
   const projs=projRes.data||[];
   const today=new Date().toISOString().slice(0,10);
