@@ -364,7 +364,7 @@ async function readCultura(P){
     m1:{v:apego,k:'Apego prom.'}, m2:{v:String(cand),k:'Candados'}, note, actions};
 }
 
-function projProgress(pr){ const h=Array.isArray(pr.hitos)?pr.hitos:[]; if(!h.length) return null; return Math.round(h.filter(x=>x.hecho).length/h.length*100); }
+function projProgress(pr){ const h=(Array.isArray(pr.hitos)?pr.hitos:[]).filter(x=>!x.cancelado); if(!h.length) return null; return Math.round(h.filter(x=>x.hecho).length/h.length*100); }
 async function readGestor(P){
   const projRes = await db.from('gpr2_proyectos').select('id,nombre,revisor,inicio,termino,status,hitos');
   if(projRes.error) throw projRes.error;
