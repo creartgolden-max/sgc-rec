@@ -387,7 +387,7 @@ async function readGestor(P){
   const pulso = enRiesgo>0?'riesgo':'optimo';
   const note = projs.length===0 ? 'Sin proyectos registrados.' :
     `${projs.length} proyectos · avance global ${avg}% · ${enRiesgo} en riesgo de fecha.`;
-  return {id:'gpr',name:'Gestor de Proyectos',cat:'Proyectos especiales',color:'#2E75B6',url:'https://creartgolden-max.github.io/gestor-proyectos-rec/',pulso,
+  return {id:'gpr',name:'Gestor de Proyectos',cat:'Proyectos especiales',color:'#2E75B6',url:'https://creartgolden-max.github.io/gestor-v2-rec/',pulso,
     m1:{v:avg+'%',k:'Avance global'}, m2:{v:String(enRiesgo),k:'En riesgo'}, note, actions};
 }
 
