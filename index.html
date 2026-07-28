@@ -455,6 +455,26 @@ async function readInventario(){
     m1:{v:String(incong),k:'Incongruencias'}, m2:{v:String(bajo),k:'Bajo mínimo'}, note, actions};
 }
 
+/* PCE · Alma: lee el resumen que guarda el modulo PCE (opcion A, fuente unica) */
+async function readPCE(P){
+  const [rowP, latest] = await Promise.all([
+    db.from('pce_resumen').select('*').eq('colaborador_id','alma').eq('periodo',P).maybeSingle(),
+    db.from('pce_resumen').select('*').eq('colaborador_id','alma').order('periodo',{ascending:false}).limit(1).maybeSingle()
+  ]);
+  if(rowP.error && rowP.error.code!=='PGRST116') throw rowP.error;
+  const row = (rowP.data) ? rowP.data : (latest.data || null);
+  const g = (row && row.global_pct!=null) ? Math.round(row.global_pct) : null;
+  const c = (row && row.cultura_pct!=null) ? Math.round(row.cultura_pct) : null;
+  const pulso = (g==null) ? 'riesgo' : (g>=90?'optimo':(g>=80?'riesgo':'critico'));
+  const per = row ? row.periodo : null;
+  const actions=[{txt:'Sesión <b>1-a-1 de crecimiento</b> con Alma (PCE del mes)',prio:'alta',owner:'Rodrigo',done:false}];
+  const note = row
+    ? `PCE global ${g==null?'—':g+'%'} · apego cultura ${c==null?'—':c+'%'} · periodo ${per}. Piloto único hasta dic 2026.`
+    : 'Sin datos de PCE capturados aún. Piloto único hasta dic 2026.';
+  return {id:'pce',name:'PCE · Alma',cat:'Plan de crecimiento · solo Alma',color:'#1F3864',url:'https://creartgolden-max.github.io/pce-rec/',pulso,
+    m1:{v:(g==null?'—':g+'%'),k:'PCE global'}, m2:{v:(c==null?'—':c+'%'),k:'Apego cultura'}, note, actions};
+}
+
 async function loadLive(){
   if(!db){ toast('Sin conexión','err'); return; }
   const P=labelToPeriodo(state.period);
@@ -463,6 +483,8 @@ async function loadLive(){
   try{
     const [gpr,cult,rev,vta]=await Promise.all([readGestor(P),readCultura(P),readRevisiones(P),readVentas(P)]);
     const liveList=[gpr,cult,rev,vta];
+    // PCE · Alma: lee pce_resumen (mismo proyecto); si falla no rompe el resto
+    try{ const pce=await readPCE(P); if(pce) liveList.push(pce); }catch(e){ console.warn('pce:', e.message); }
     // Inventario: 2ª conexión Supabase (otro proyecto); si falla o no está configurada, no rompe el resto
     try{ const inv=await readInventario(); if(inv) liveList.push(inv); }catch(e){ console.warn('inventario:', e.message); }
     liveList.forEach(live=>{
