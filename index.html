@@ -285,6 +285,9 @@ let state = {
      m1:{v:"—",k:"PCE global"},m2:{v:"—",k:"Pts cultura"},
      note:"Piloto único hasta dic 2026. Integra KPI, cultura y avance de proyectos de Alma. Conversación 1-a-1 pendiente.",
      actions:[{txt:"Sesión <b>1-a-1 de crecimiento</b> con Alma (PCE del mes)",prio:"alta",owner:"Rodrigo",done:false}]},
+    {id:"vis",name:"Gestor de Visitas",cat:"Comercial · visitas, cartera y prospectos",color:"#b5603a",url:"https://creartgolden-max.github.io/gestor-visitas-rec/",pulso:"optimo",
+     m1:{v:"—",k:"Visitas del mes"},m2:{v:"—",k:"Cartera / cortes"},
+     note:"Gestor comercial: visitas, plan, prospectos, más buscados y cortes de cartera.",actions:[]},
   ],
   manualActions:{},   // {modId: [actions]} añadidas por Rodrigo a módulos en vivo
   overlay:{}          // {modId::txt: {done, decision, decExtra, pe, peReady}}
@@ -296,7 +299,7 @@ const prioOrder={alta:0,media:1,baja:2};
 let filter="todas";
 
 function save(){ try{ localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
-function load(){ try{ const d=localStorage.getItem(CONFIG.STORAGE_KEY); if(d){ const s=JSON.parse(d); state=Object.assign(state,s); state.manualActions=state.manualActions||{}; state.overlay=state.overlay||{}; } }catch(e){} const FU={pce:'https://creartgolden-max.github.io/pce-rec/',inv:'https://creartgolden-max.github.io/inventario-rec/'}; (state.modules||[]).forEach(m=>{ if(FU[m.id]) m.url=FU[m.id]; }); }
+function load(){ const seed=(state.modules||[]).slice(); try{ const d=localStorage.getItem(CONFIG.STORAGE_KEY); if(d){ const s=JSON.parse(d); state=Object.assign(state,s); state.manualActions=state.manualActions||{}; state.overlay=state.overlay||{}; } }catch(e){} if(Array.isArray(state.modules)){ seed.forEach(sm=>{ if(!state.modules.some(m=>m.id===sm.id)) state.modules.push(sm); }); } else { state.modules=seed; } const FU={pce:'https://creartgolden-max.github.io/pce-rec/',inv:'https://creartgolden-max.github.io/inventario-rec/'}; (state.modules||[]).forEach(m=>{ if(FU[m.id]) m.url=FU[m.id]; }); }
 
 function toast(msg,kind){ const t=document.getElementById('toast'); t.textContent=msg; t.className='toast show'+(kind?(' '+kind):''); clearTimeout(t._h); t._h=setTimeout(()=>{t.className='toast';},3800); }
 function setBadge(txt,color){ const b=document.getElementById('liveBadge'); if(b){ b.textContent=txt; b.style.background=color; } }
